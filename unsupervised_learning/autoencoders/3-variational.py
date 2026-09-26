@@ -23,9 +23,10 @@ def autoencoder(input_dims, hidden_layers, latent_dims):
         hidden_ly = keras.layers.Dense(units=hidden_layers[i],
                                        activation='relu')
         Y_prev = hidden_ly(Y_prev)
-    latent_ly = keras.layers.Dense(units=latent_dims, activation=None)
-    z_mean = latent_ly(Y_prev)
-    z_log_sigma = latent_ly(Y_prev)
+    mean_ly = keras.layers.Dense(units=latent_dims, activation=None)
+    z_mean = mean_ly(Y_prev)
+    log_sigma_ly = keras.layers.Dense(units=latent_dims, activation=None)
+    z_log_sigma = log_sigma_ly(Y_prev)
 
     def sampling(args):
         """Sampling similar points in latent space"""
@@ -52,19 +53,18 @@ def autoencoder(input_dims, hidden_layers, latent_dims):
     output = last_ly(Y_prev)
     decoder = keras.Model(X_decode, output)
 
-    e_output = encoder(X_input)[-1]
+    e_output = encoder(X_input)[0]
     d_output = decoder(e_output)
     auto = keras.Model(X_input, d_output)
 
     def vae_loss(x, x_decoder_mean):
-        x_loss = keras.backend.binary_crossentropy(x, x_decoder_mean)
-        x_loss = keras.backend.sum(x_loss, axis=1)
-        kl_loss = - 0.5 * keras.backend.mean(1 + z_log_sigma -
-                                             keras.backend.square(z_mean) -
-                                             keras.backend.exp(z_log_sigma),
-                                             axis=-1)
-        return x_loss + kl_loss
+        """Reconstruction loss plus KL divergence"""
+        x_loss = keras.losses.binary_crossentropy(x, x_decoder_mean)
+        x_loss *= input_dims
+        kl_loss = 1 + z_log_sigma - keras.backend.square(z_mean) - \
+            keras.backend.exp(z_log_sigma)
+        kl_loss = -0.5 * keras.backend.sum(kl_loss, axis=-1)
+        return keras.backend.mean(x_loss + kl_loss)
 
     auto.compile(loss=vae_loss, optimizer='adam')
     return encoder, decoder, auto
-
